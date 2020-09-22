@@ -1,10 +1,8 @@
-#include <stdint.h>
+ #include <stdint.h>
 
 #include "arm_math.h"
 #include "arm_const_structs.h"
 
-#define F_SAMP 44100
-#define M_LEN 128
 #define L_LEN 128
 #define N_LEN 256
 #define B_BLOCKS 3
@@ -15,6 +13,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <SerialFlash.h>
+
 
 // GUItool: begin automatically generated code
 AudioInputI2S            i2s2;           //xy=126.8062629699707,234.8249797821045
@@ -31,37 +30,33 @@ AudioConnection          patchCord6(mixer1, queue1);
 AudioControlSGTL5000     sgtl5000_1;     //xy=350.19373321533203,118.0000057220459
 // GUItool: end automatically generated code
 
-typedef struct F32_Data{
-    float32_t msg[B_BLOCKS][N_LEN] = {{0}};
-    float32_t fft[B_BLOCKS][2 * N_LEN] = {{0}};
-} fdata;
-int fdata_head = 0;
+uint8_t bstart = 1;
 
 uint8_t flag = 1;
 
-fdata mf;
-fdata rx;
+int16_t fdata_head = 0;
 
-q15_t q_rx_msg[N_LEN] = {0};
+float32_t mf_fft[B_BLOCKS][2*N_LEN] = {{0}};
+float32_t rx_fft[B_BLOCKS][2*N_LEN] = {{0}};
 
-float32_t y_msg[B_BLOCKS][N_LEN] = {0};
-float32_t y_fft[B_BLOCKS][2 * N_LEN] = {0};
 
-const int ola_max = N_LEN + L_LEN*(B_BLOCKS - 1);
+const int ola_max = N_LEN+9*L_LEN; //+ L_LEN*(B_BLOCKS - 1);
 float32_t ola_buffer[ola_max] = {0};
 int ola_head = N_LEN-L_LEN;
 const int ola_overlap = N_LEN-L_LEN;
 
+int8_t loops = 0;
 
 void setup() {
   // put your setup code here, to run once:
+  float32_t mf_msg[B_BLOCKS][N_LEN] = {{0}};
   
-  Serial.begin(9600);
+  Serial.begin(58824);
   
-  AudioMemory(100);
+  AudioMemory(200);
   sgtl5000_1.enable();
   sgtl5000_1.inputSelect(AUDIO_INPUT_MIC);
-  sgtl5000_1.micGain(40);
+  sgtl5000_1.micGain(60);
   sgtl5000_1.unmuteHeadphone();
   sgtl5000_1.audioPreProcessorEnable();
   sgtl5000_1.audioPostProcessorEnable();
@@ -72,22 +67,17 @@ void setup() {
 
   while (!Serial) {}
 
-  sine1.amplitude(0.8);
-  sine1.frequency(882);
-
-  
-
   const int bit_len = 1;
   uint8_t bitseq[bit_len] = {1};
 
-  generateFSK2D(mf.msg, bitseq, bit_len, F_SAMP, M_LEN*B_BLOCKS/bit_len, 5000, 882);
-  
+  generateFSK2D(mf_msg, bitseq, bit_len, 44100, L_LEN*B_BLOCKS/bit_len, 5000, 882);
+
   /*
   for(int p = 0; p < B_BLOCKS; p++)
   {
     for(int k = 0; k < N_LEN; k++)
     {
-      Serial.println( mf.msg[p][k] );
+      Serial.println( mf_msg[p][k] );
       delay(2);
     }
     delay(1000);
@@ -96,111 +86,81 @@ void setup() {
   
   for(int p = 0; p < B_BLOCKS; p++)
   {
-    f32tRealFFT(mf.fft[p], mf.msg[p], N_LEN);
+    f32tRealFFT(mf_fft[p], mf_msg[p], N_LEN);
   }
 
+  /*
+  for(int p = 0; p < B_BLOCKS; p++)
+  {
+    for(int k = 0; k < N_LEN; k++)
+    {
+      Serial.println( mf_fft[p][k] );
+      delay(2);
+    }
+    delay(1000);
+  }
+  */
   
   queue1.begin();
+  sine1.amplitude(1);
+  sine1.frequency(882);
 }
 
 
 void loop() 
 {
-  
   // put your main code here, to run repeatedly:
-  if (flag == 1) 
+  if(bstart == 1)
   {
-    if (queue1.available() >= PACKETS)
-    {    
-      for (int k = 0; k < PACKETS; k++)
-      {
-        memcpy(q_rx_msg + 128*k, queue1.readBuffer(), 256);
-        queue1.freeBuffer();
-      }
-      flag = 0;
-    }
-  }
-
-  if (flag == 0)
-  {
-    float32_t sum_msg[N_LEN] = {0};
-    //float32_t sum_fft[2*N_LEN] = {0};
- 
-    flag = 1;
-      
-    arm_q15_to_float(q_rx_msg, rx.msg[fdata_head], N_LEN);
-
-    /* 
-    for(int k = 0; k < N_LEN; k++)
+    if(loops < 10)
     {
-      Serial.println( rx.msg[fdata_head][k] );
-    }
-    */
+      q15_t q_rx_msg[N_LEN] = {0};
+       
+      if (flag == 1) 
+      {
+        if (queue1.available() >= PACKETS)
+        {    
+          for (int k = 0; k < PACKETS; k++)
+          {
+            memcpy(q_rx_msg + 128*k, queue1.readBuffer(), 256);
+            queue1.freeBuffer();
+          }
+          flag = 0;
+        }
+      }
     
+      if (flag == 0)
+      {
+        //int prev = micros();
         
-    f32tRealFFT(rx.fft[fdata_head], rx.msg[fdata_head], N_LEN);
-    
-    /*
-    for(int k = 0; k < N_LEN; k++)
-    {
-      Serial.println( rx.fft[fdata_head][k] );
-    }
-    */
+        flag = 1;
+        block_convolver(q_rx_msg);
+        loops++;
         
-    int index;
-    for(int k = 0; k < B_BLOCKS; k++)
-    {
-      index = k + fdata_head;
-     
-      if(index >= B_BLOCKS)
-      {
-        index -= B_BLOCKS;
+        //int curr = micros();
+        //Serial.println(curr-prev);
       }
-            
-      cmplx_mult(rx.fft[index], mf.fft[B_BLOCKS-k], y_fft[index], N_LEN);
-      f32tRealIFFT(y_msg[index], y_fft[index], N_LEN);
-      /*
-      for(int k = 0; k < N_LEN; k++)
-      {
-        Serial.println( y_fft[index][k] );
-      }
-      */
-      
-      for(int j = 0; j < N_LEN; j++)
-      {
-        sum_msg[j] += y_msg[index][j];
-      }
-    }
-    
-      
-    //f32tRealIFFT(sum_msg, sum_fft, N_LEN);
-
-    
-    for(int k = 0; k < N_LEN; k++)
-    {
-      Serial.println( sum_msg[k] );
-    }
-    
-    
-    if(fdata_head >= B_BLOCKS-1)
-    {
-      fdata_head = 0;
     }
     else
     {
-      fdata_head++;
+      bstart = 0;
+      queue1.clear();
+      queue1.end();
+      /*
+      for (int j = 0; j < ola_max; j++)    
+      {
+        Serial.println(ola_buffer[j]);
+        delay(2);
+      }
+      */
+      
+      for (int j = 0; j < ola_max; j++)    
+      {
+        Serial.println(ola_buffer[j]);
+        delay(2);
+      }
+      
     }
-    
-    //write_ola_buffer(sum_msg);
-    
-    
-    /*     
-    for (int j = 0; j < ola_max; j++)
-    {
-      Serial.println(ola_buffer[j]);
-    }
-    */
-    
   }
 }
     
@@ -209,7 +169,7 @@ void loop()
 void generateFSK2D(float32_t out_fsk_modulated[][N_LEN], uint8_t* in_bit_sequence, int num_bits, float fs, int samples_per_bit, float f0, float f1)
 {
   float f_mux;
-  int modu_len = M_LEN*B_BLOCKS;
+  int modu_len = L_LEN*B_BLOCKS;
   float32_t pre_modulated[ modu_len ] = {0};
   float32_t reversed_modu[ modu_len ] = {0};
   
@@ -239,9 +199,9 @@ void generateFSK2D(float32_t out_fsk_modulated[][N_LEN], uint8_t* in_bit_sequenc
 
   for (int p = 0; p < B_BLOCKS; p++)
   {
-    for (int j = 0; j < M_LEN; j++)
+    for (int j = 0; j < L_LEN; j++)
     {
-      int indx = p*M_LEN;
+      int indx = p*L_LEN;
       out_fsk_modulated[p][j] = reversed_modu[indx + j];
     }
   }
@@ -284,8 +244,7 @@ void cmplx_mult( const float32_t* pSrcA, const float32_t* pSrcB, float32_t* pDst
 
 
 void write_ola_buffer(float32_t* input)
-{
-
+{ 
   ola_head -= ola_overlap;
   
   if(ola_head < 0)
@@ -296,6 +255,7 @@ void write_ola_buffer(float32_t* input)
   for(int i = 0; i < ola_overlap; i++)
   {
     ola_buffer[ola_head++] +=  input[i];
+    //Serial.println(ola_buffer[i]);
 
     if(ola_buffer[ola_head]>60)
     {
@@ -323,4 +283,72 @@ void write_ola_buffer(float32_t* input)
     } 
   }
 
+}
+
+
+
+void block_convolver(q15_t* q15_data)
+{
+  float32_t y_fft[2*N_LEN] = {0};   
+  float32_t rx_msg[N_LEN] = {0};
+   
+  arm_q15_to_float(q15_data, rx_msg, N_LEN);
+
+  /*
+  for(int k = 0; k < N_LEN; k++)
+  {
+    Serial.println( rx.msg[fdata_head][k] );
+  }
+  */
+  
+      
+  f32tRealFFT(rx_fft[fdata_head], rx_msg, N_LEN);
+  
+  float32_t sum_msg[N_LEN] = {0};
+  float32_t sum_fft[2*N_LEN] = {0};
+
+  
+  int index;
+  for(int k = 0; k < B_BLOCKS; k++)
+  {
+    index = fdata_head-k;
+    
+    if(index < 0)
+    {
+      index += B_BLOCKS;
+    }
+
+    //Serial.print(index);
+    //Serial.print("\t");
+        
+    arm_cmplx_mult_cmplx_f32(rx_fft[index], mf_fft[k], y_fft, N_LEN);
+    
+    for(int j = 0; j < 2*N_LEN; j++)
+    {
+      sum_fft[j] += y_fft[j];
+    }
+  }
+  //Serial.println();
+  f32tRealIFFT(sum_msg, sum_fft, N_LEN);
+
+  /*
+  for (int j = 0; j < N_LEN; j++)
+  {
+    Serial.println(sum_msg[j]);
+  }
+  
+  Serial.println(200);
+  Serial.println(-200);
+  */
+
+  if(fdata_head >= B_BLOCKS-1)
+  {
+    fdata_head = 0;
+  }
+  else
+  {
+    fdata_head++;
+  }
+
+  write_ola_buffer(sum_msg);
 }
