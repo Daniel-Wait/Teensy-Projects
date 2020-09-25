@@ -3,8 +3,8 @@
 #include "arm_math.h"
 #include "arm_const_structs.h"
 
-#define DOWN_SAMP 4
-#define L_LEN 1024 //8 PACKETS
+#define DOWN_SAMP 8
+#define L_LEN 1042 //8 PACKETS
 #define N_LEN 2048
 #define B_BLOCKS 6
 #define PACKETS 8 //8 PACKETS * 1/DOWNSAMP
@@ -37,14 +37,14 @@ uint8_t flag = 1;
 
 int16_t fdata_head = 0;
 
-const float f1 = 882;
-const float f0 = 441;
+const float f1 = 441;
+const float f0 = 882;
 
 float32_t mf_fft[B_BLOCKS][2*N_LEN] = {{0}};
 float32_t rx_fft[B_BLOCKS][2*N_LEN] = {{0}};
 
 
-const int ola_max = N_LEN+9*L_LEN; //+ L_LEN*(B_BLOCKS - 1);
+const int ola_max = N_LEN+5*L_LEN; //+ L_LEN*(B_BLOCKS - 1);
 float32_t ola_buffer[ola_max] = {0};
 int ola_head = N_LEN-L_LEN;
 const int ola_overlap = N_LEN-L_LEN;
@@ -55,9 +55,9 @@ void setup() {
   // put your setup code here, to run once:
   float32_t mf_msg[B_BLOCKS][N_LEN] = {{0}};
   
-  Serial.begin(58824);
-  
-  AudioMemory(200);
+  Serial.begin(9600);
+   
+  AudioMemory(100);
   sgtl5000_1.enable();
   sgtl5000_1.inputSelect(AUDIO_INPUT_MIC);
   sgtl5000_1.micGain(0);
@@ -137,6 +137,7 @@ void loop()
             delay(5);
           }
           */
+          
           flag = 0;
         }
       }
@@ -162,12 +163,18 @@ void loop()
     else
     {
       bstart = 0;
-
-      for (int j = 0; j < ola_max; j++)    
+      
+      
+      for(int m = 0; m < ola_max; m++)
       {
-        Serial.println(ola_buffer[j]);
-        delay(1);
+        int indx = ola_head + m;
+        if(indx >= ola_max)
+        {
+          indx -= ola_max;
+        }               
+        Serial.println( ola_buffer[indx] );
       }
+      
             
       queue1.clear();
       queue1.end();      
@@ -266,12 +273,6 @@ void write_ola_buffer(float32_t* input)
   for(int i = 0; i < ola_overlap; i++)
   {
     ola_buffer[ola_head++] +=  input[i];
-    //Serial.println(ola_buffer[i]);
-
-    if(ola_buffer[ola_head]>60)
-    {
-      //Serial.println("THRESHOLD"); 
-    }
     
     if(ola_head >= ola_max)
     {
@@ -282,11 +283,6 @@ void write_ola_buffer(float32_t* input)
   for(int i = ola_overlap; i < N_LEN; i++)
   {
     ola_buffer[ola_head++] = input[i];
-    
-    if(ola_buffer[ola_head]>60)
-    {
-      //Serial.println("THRESHOLD"); 
-    }
     
     if(ola_head >= ola_max)
     {
@@ -374,9 +370,8 @@ void block_convolver(q15_t* q15_data)
   {
     Serial.println(sum_msg[j]);
   }
-  
-  Serial.println(200);
-  Serial.println(-200);
+  Serial.println(4000);
+  Serial.println(-4000);
   */
 
   if(fdata_head >= B_BLOCKS-1)
