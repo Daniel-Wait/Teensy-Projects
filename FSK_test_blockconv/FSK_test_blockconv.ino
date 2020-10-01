@@ -1,5 +1,3 @@
-//TO DO: convert integers to binary codes
-
 #include <stdint.h>
 
 #include "arm_math.h"
@@ -10,7 +8,7 @@
 #define N_LEN 2048
 #define B_BLOCKS 6
 #define BIT_LEN 882
-#define PACKETS 1 //8 PACKETS * 1/DOWNSAMP
+#define PACKETS 8 //8 PACKETS * 1/DOWNSAMP
 
 #include <Audio.h>
 #include <Wire.h>
@@ -40,14 +38,14 @@ uint8_t flag = 1;
 
 int16_t fdata_head = 0;
 
-const float f1 = 200;
-const float f0 = 800;
+const float f1 = 800;
+const float f0 = 200;
 
 float32_t mf_fft[B_BLOCKS][2*N_LEN] = {{0}};
 float32_t rx_fft[B_BLOCKS][2*N_LEN] = {{0}};
 
 
-const int ola_max = N_LEN+9*L_LEN; //+ L_LEN*(B_BLOCKS - 1);
+const int ola_max = N_LEN+11*L_LEN; //+ L_LEN*(B_BLOCKS - 1);
 float32_t ola_buffer[ola_max] = {0};
 int ola_head = N_LEN-L_LEN;
 const int ola_overlap = N_LEN-L_LEN;
@@ -78,7 +76,7 @@ void setup() {
   int bitseq[bit_num] = {1,0,1,0,1,0,1,0,1,0,1,0};
   float space = f0*DOWN_SAMP;
   float mark = f1*DOWN_SAMP;
-  generateFSK2D(mf_msg, bitseq, bit_num, 44100, BIT_LEN, space, mark);
+  generateFSK2D(mf_msg, bitseq, bit_num, 44100, BIT_LEN/DOWN_SAMP , space, mark);
 
   /*
   for(int p = 0; p < B_BLOCKS; p++)
@@ -86,7 +84,6 @@ void setup() {
     for(int k = 0; k < L_LEN; k++)
     {
       Serial.println( mf_msg[p][k] );
-      delay(2);
     }
   }
   */
@@ -119,7 +116,7 @@ void loop()
   // put your main code here, to run repeatedly:
   if(bstart == 1)
   {
-    if(loops < 10)
+    if(loops < 12)
     {
       q15_t q_rx_msg[L_LEN*DOWN_SAMP] = {0};
        
@@ -175,7 +172,6 @@ void loop()
           indx -= ola_max;
         }               
         Serial.println( ola_buffer[indx] );
-        delay(2);
       }
       
             
@@ -335,29 +331,30 @@ void block_convolver(q15_t* q15_data)
   arm_q15_to_float(q15_data, rx_msg, L_LEN*DOWN_SAMP);
   downsample(rx_down, rx_msg, L_LEN);
 
-
-  //if(loops >= 9)
-  //{
-     /*
-    for(int k = 0; k < L_LEN*DOWN_SAMP; k++)  
-    {
-      Serial.println( q15_data[k] );
-      delay(5);
-    }
+  /*
+  if(loops == 1)
+  {
+  queue1.end();
+  
+  for(int k = 0; k < L_LEN*DOWN_SAMP; k++)  
+  {
+    Serial.println( q15_data[k] );
+    delay(5);
+  }
+  
+  
+  for(int k = 0; k < L_LEN*DOWN_SAMP; k++)
+  {
+    Serial.println( 10*rx_msg[k] );
+  }
+  */
+  
+  for(int k = 0; k < L_LEN; k++)  
+  {
+    Serial.println( rx_down[k] );
+  }
     
-    
-    for(int k = 0; k < L_LEN*DOWN_SAMP; k++)
-    {
-      Serial.println( 10*rx_msg[k] );
-    }
-
-    
-    for(int k = 0; k < N_LEN; k++)  
-    {
-      Serial.println( rx_down[k] );
-    }
-    */
- //}
+  //}
   
       
   f32tRealFFT(rx_fft[fdata_head], rx_down, N_LEN);
@@ -376,10 +373,7 @@ void block_convolver(q15_t* q15_data)
     {
       index += B_BLOCKS;
     }
-
-    //Serial.print(index);
-    //Serial.print("\t");
-        
+    
     arm_cmplx_mult_cmplx_f32(rx_fft[index], mf_fft[k], y_fft, N_LEN);
     
     for(int j = 0; j < 2*N_LEN; j++)
@@ -387,8 +381,8 @@ void block_convolver(q15_t* q15_data)
       sum_fft[j] += y_fft[j];
     }
   }
-  //Serial.println();
   f32tRealIFFT(sum_msg, sum_fft, N_LEN);
+
 
   /*
   for (int j = 0; j < N_LEN; j++)
@@ -398,6 +392,7 @@ void block_convolver(q15_t* q15_data)
   Serial.println(4000);
   Serial.println(-4000);
   */
+
 
   if(fdata_head >= B_BLOCKS-1)
   {
