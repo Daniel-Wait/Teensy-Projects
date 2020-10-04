@@ -5,12 +5,12 @@
 #include "arm_math.h"
 #include "arm_const_structs.h"
 
-#define DOWN_SAMP 2
+#define DOWN_SAMP 1
 #define L_LEN 1024 //8 PACKETS
 #define N_LEN 2048
 #define B_BLOCKS 6
-#define BIT_LEN 882
-#define PACKETS 1 //8 PACKETS * 1/DOWNSAMP
+#define BIT_LEN 441
+#define PACKETS 8 //8 PACKETS * 1/DOWNSAMP
 
 #include <Audio.h>
 #include <Wire.h>
@@ -175,7 +175,6 @@ void loop()
           indx -= ola_max;
         }               
         Serial.println( ola_buffer[indx] );
-        delay(2);
       }
       
             
@@ -350,13 +349,13 @@ void block_convolver(q15_t* q15_data)
     {
       Serial.println( 10*rx_msg[k] );
     }
-
+    */
     
     for(int k = 0; k < N_LEN; k++)  
     {
       Serial.println( rx_down[k] );
     }
-    */
+    
  //}
   
       

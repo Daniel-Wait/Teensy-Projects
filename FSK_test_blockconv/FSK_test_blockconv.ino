@@ -3,11 +3,11 @@
 #include "arm_math.h"
 #include "arm_const_structs.h"
 
-#define DOWN_SAMP 2
+#define DOWN_SAMP 4
 #define L_LEN 1024 //8 PACKETS
 #define N_LEN 2048
 #define B_BLOCKS 6
-#define BIT_LEN 882
+#define BIT_LEN 441
 #define PACKETS 8 //8 PACKETS * 1/DOWNSAMP
 
 #include <Audio.h>
@@ -38,7 +38,7 @@ uint8_t flag = 1;
 
 int16_t fdata_head = 0;
 
-const float f1 = 800;
+const float f1 = 400;
 const float f0 = 200;
 
 float32_t mf_fft[B_BLOCKS][2*N_LEN] = {{0}};
@@ -73,10 +73,14 @@ void setup() {
   while (!Serial) {}
 
   const int bit_num = 12;
-  int bitseq[bit_num] = {1,0,1,0,1,0,1,0,1,0,1,0};
+  
+  //int bitseq[bit_num] = {1,0,1,0,1,0,1,0,1,0,1,0};
+  //int bitseq[bit_num] = {1,1,0,1,0,0,1,1,1,1,0,0};
+  int bitseq[bit_num] = {1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0};
+  
   float space = f0*DOWN_SAMP;
   float mark = f1*DOWN_SAMP;
-  generateFSK2D(mf_msg, bitseq, bit_num, 44100, BIT_LEN/DOWN_SAMP , space, mark);
+  generateFSK2D(mf_msg, bitseq, bit_num, 44100, BIT_LEN , space, mark);
 
   /*
   for(int p = 0; p < B_BLOCKS; p++)
@@ -84,6 +88,7 @@ void setup() {
     for(int k = 0; k < L_LEN; k++)
     {
       Serial.println( mf_msg[p][k] );
+      delay(5);
     }
   }
   */
@@ -170,7 +175,8 @@ void loop()
         if(indx >= ola_max)
         {
           indx -= ola_max;
-        }               
+        }
+        delay(1);               
         Serial.println( ola_buffer[indx] );
       }
       
@@ -197,22 +203,42 @@ void generateFSK2D(float32_t out_fsk_modulated[][N_LEN], int* in_bit_sequence, i
     if (in_bit_sequence[i] == 0)
     {
       f_mux = f0;
+
+      /*
+      for (int cnt = 0; cnt < samples_per_bit; cnt++)
+      {
+        f_mux = f0 - DOWN_SAMP*100*cnt/samples_per_bit;
+        pre_modulated[index + cnt] = sin( (float32_t)(2 * PI * f_mux * (index+cnt) ) / fs );
+      }
+      */
     }
     else
     {
       f_mux = f1;
+      /*
+      for (int cnt = 0; cnt < samples_per_bit; cnt++)
+      {
+        f_mux = f1 + DOWN_SAMP*100*cnt/samples_per_bit;
+        pre_modulated[index + cnt] = sin( (float32_t)(2 * PI * f_mux * (index+cnt) ) / fs );
+      }
+      */
     }
 
-    //Serial.println( f_mux );
     
+
     for (int cnt = 0; cnt < samples_per_bit; cnt++)
     {
-      pre_modulated[index + cnt] = arm_sin_f32( (float32_t)(2 * PI * f_mux * (index+cnt) ) / fs );
-      //Serial.println( pre_modulated[ index+cnt ] );
-      //delay(5);
+      float fchirp = 50;
+      if(f_mux == f0)
+      {
+        fchirp = -1 * fchirp;
+      }
+
+      fchirp = fchirp*DOWN_SAMP*cnt/samples_per_bit;
+      
+      pre_modulated[index + cnt] = arm_sin_f32( (float32_t)(2 * PI * (f_mux + fchirp) * cnt ) / fs );
     }
-    //Serial.println(+1.5);
-    //Serial.println(-1.5);
+
   }
   
   for(int k = 0; k < modu_len; k++)
@@ -347,13 +373,13 @@ void block_convolver(q15_t* q15_data)
   {
     Serial.println( 10*rx_msg[k] );
   }
-  */
+  
   
   for(int k = 0; k < L_LEN; k++)  
   {
     Serial.println( rx_down[k] );
   }
-    
+  */  
   //}
   
       
