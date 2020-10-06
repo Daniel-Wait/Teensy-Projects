@@ -314,7 +314,13 @@ void write_ola_buffer(float32_t* input)
     
   for(int i = 0; i < ola_overlap; i++)
   {
-    ola_buffer[ola_head++] +=  input[i];
+    ola_buffer[ola_head] +=  input[i];
+
+    if( (ola_buffer[ola_head] >= ola_buff) || (ola_buffer[ola_head] >= thresh) )
+    {
+      
+    }
+
     
     if(ola_head >= ola_max)
     {
